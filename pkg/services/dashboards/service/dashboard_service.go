@@ -650,7 +650,27 @@ func (dr *DashboardServiceImpl) FindDashboards(ctx context.Context, query *dashb
 			dr.metrics.sharedWithMeFetchDashboardsRequestsDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
 		}(time.Now())
 	}
-	return dr.dashboardStore.FindDashboards(ctx, query)
+
+	dash, err := dr.dashboardStore.FindDashboards(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	if dr.features.IsEnabled(ctx, featuremgmt.FlagNestedFolders) {
+		userDashboardUIDs, err := dr.getUserSharedDashboardUIDs(ctx, query.SignedInUser)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, d := range dash {
+			if slices.Contains(userDashboardUIDs, d.UID) {
+				// TODO: somehow indicate in search results that the folder should not be shown - maybe add a flag field
+				// TODO: would be better to somehow use the guardian to check permissions for distinct folders present on search results
+			}
+		}
+	}
+
+	return dash, nil
 }
 
 func (dr *DashboardServiceImpl) SearchDashboards(ctx context.Context, query *dashboards.FindPersistedDashboardsQuery) (model.HitList, error) {
